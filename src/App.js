@@ -1,9 +1,12 @@
 import './App.css';
 import React, { useState, useEffect, useRef } from 'react';
 import Slider from '@mui/material/Slider';
-import axios from 'axios';
+import axios from 'axios';  
+import ROSLIB from 'roslib';
 
-function App() {
+function App1() {
+
+  const imgRef = useRef(null);
   const [randomNumber, setRandomNumber] = useState(null);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,6 +30,46 @@ function App() {
   };
 
   useEffect(() => {
+    const ros = new ROSLIB.Ros({
+      url: 'ws://10.42.0.1:9090' // Укажите ваш адрес ROS bridge
+    });
+
+    ros.on('connection', () => console.log("Connected to ROS"));
+    ros.on('error', (error) => console.error("Error:", error));
+    ros.on('close', () => console.log("Connection closed"));
+
+    // 2. Подписка на тему с изображением
+    const imageTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/pioneer_max_camera/image_raw/compressed', // Замените на вашу тему
+      messageType: 'sensor_msgs/CompressedImage'
+    });
+
+    // 3. Обработка кадров
+    imageTopic.subscribe(message => {
+      if (!imgRef.current) return;
+      
+      // Создаем base64 строку из данных
+      const base64Data = message.data;
+      
+      // Определяем MIME-тип из формата
+      let mimeType;
+      switch (message.format.toLowerCase()) {
+        case 'jpeg': 
+        case 'jpg':
+          mimeType = 'image/jpeg';
+          break;
+        case 'png':
+          mimeType = 'image/png';
+          break;
+        default:
+          console.warn('Unknown format:', message.format);
+          mimeType = 'image/jpeg'; // Фолбэк
+      }
+
+      imgRef.current.src = `data:${mimeType};base64,${base64Data}`;
+    });
+
     fetchData();
     const intervalId = setInterval(fetchData, 60000);
     const timerId = setInterval(() => {
@@ -34,6 +77,8 @@ function App() {
     }, 1000);
 
     return () => {
+      imageTopic.unsubscribe();
+      ros.close();
       clearInterval(intervalId);
       clearInterval(timerId);
     };
@@ -100,8 +145,12 @@ function App() {
     {/* Центральная область видео */}
     <div id="viewer-wrapper">
       <video id="video" autoPlay="" playsInline="" muted="" />
+      <img 
+        ref={imgRef} 
+        style={{ maxWidth: '100%', display: 'block', margin: '0 auto' }}
+      />
     </div>
-    {/* Блок управления (CAM + LED) */}
+      {/* Блок управления (CAM + LED) */}
     <div id="controls">
       {/* Слайдер CAM */}
       <div className="range-slider">
@@ -145,13 +194,85 @@ function App() {
     </div>
     {/* =====  FOOTER ===== */}
     <div id="footer">
-      Height: <span id="height-value">1.85 m</span>
+      Height: <span id="height-value">1.85 m </span>
     </div>
     {/* =====  SCRIPT  ===== */}
   </div>
 </>
-
   );
 }
+function App2() {
+  const imgRef = useRef(null);
 
-export default App;
+  useEffect(() => {
+    // 1. Подключение к ROS bridge
+    const ros = new ROSLIB.Ros({
+      url: 'ws://10.42.0.1:9090' // Укажите ваш адрес ROS bridge
+    });
+
+    ros.on('connection', () => console.log("Connected to ROS"));
+    ros.on('error', (error) => console.error("Error:", error));
+    ros.on('close', () => console.log("Connection closed"));
+
+    // 2. Подписка на тему с изображением
+    const imageTopic = new ROSLIB.Topic({
+      ros: ros,
+      name: '/pioneer_max_camera/image_raw/compressed', // Замените на вашу тему
+      messageType: 'sensor_msgs/CompressedImage'
+    });
+
+    // 3. Обработка кадров
+    imageTopic.subscribe(message => {
+      if (!imgRef.current) return;
+      
+      // Создаем base64 строку из данных
+      const base64Data = message.data;
+      
+      // Определяем MIME-тип из формата
+      let mimeType;
+      switch (message.format.toLowerCase()) {
+        case 'jpeg': 
+        case 'jpg':
+          mimeType = 'image/jpeg';
+          break;
+        case 'png':
+          mimeType = 'image/png';
+          break;
+        default:
+          console.warn('Unknown format:', message.format);
+          mimeType = 'image/jpeg'; // Фолбэк
+      }
+
+      imgRef.current.src = `data:${mimeType};base64,${base64Data}`;
+    });
+
+    // Отписка при размонтировании компонента
+    return () => {
+      imageTopic.unsubscribe();
+      ros.close();
+    };
+  }, []);
+
+  return (
+    <div className="App">
+      <h1>ROS Image Stream</h1>
+      <img 
+        ref={imgRef} 
+        style={{ maxWidth: '60%', display: 'block', margin: '0 auto' }}
+      />
+    </div>
+  );
+}
+function IntegratedApp() {
+  return (
+    <>
+      <div key="app1">
+      <div key="app2">
+        <App2 />
+      </div>
+        <App1 />
+      </div>
+    </>
+  );
+}
+export default App1;
