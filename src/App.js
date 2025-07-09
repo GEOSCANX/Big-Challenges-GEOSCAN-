@@ -1,11 +1,9 @@
 import './App.css';
 import React, { useState, useEffect, useRef } from 'react';
-import Slider from '@mui/material/Slider';
 import axios from 'axios';  
 import ROSLIB from 'roslib';
 
 function App1() {
-
   const imgRef = useRef(null);
   const [randomNumber, setRandomNumber] = useState(null);
   const [text, setText] = useState('');
@@ -13,12 +11,28 @@ function App1() {
   const [error, setError] = useState(null);
   const [timeLeft, setTimeLeft] = useState(60);
 
+
+  const [randomNumber1, setRandomNumber1] = useState(null);
+  const [text1, setText1] = useState('');
+  const [loading1, setLoading1] = useState(false);
+  const [error1, setError1] = useState(null);
+  const [randomNumber2, setRandomNumber2] = useState(null);
+  const [text2, setText2] = useState('');
+  const [loading2, setLoading2] = useState(false);
+  const [error2, setError2] = useState(null);
+
   const fetchData = async () => {
     try {
+      setLoading2(true);
+      const response2 = await axios.post('http://localhost:8000/api/data2', {user_text: text2});
+      setRandomNumber2(response2.data.random_number2);
+      setError2(null);
+      setLoading2(true);
+      const response1 = await axios.post('http://localhost:8000/api/data1', {user_text: text1});
+      setRandomNumber1(response1.data.random_number1);
+      setError1(null);
       setLoading(true);
-      const response = await axios.post('http://localhost:8000/api/data', {
-        user_text: text
-      });
+      const response = await axios.post('http://localhost:8000/api/data', {user_text: text});
       setRandomNumber(response.data.random_number);
       setError(null);
     } catch (err) {
@@ -26,9 +40,10 @@ function App1() {
       console.error('Ошибка при запросе:', err);
     } finally {
       setLoading(false);
+      setLoading1(false);
+      setLoading2(false);
     }
   };
-
   useEffect(() => {
     const ros = new ROSLIB.Ros({
       url: 'ws://10.42.0.1:9090' // Укажите ваш адрес ROS bridge
@@ -82,7 +97,7 @@ function App1() {
       clearInterval(intervalId);
       clearInterval(timerId);
     };
-  }, [text]);
+  }, [text],[text1],[text2]);
 
   const [slider1, setSlider1] = useState(50);
   const [slider2, setSlider2] = useState(50);
@@ -171,6 +186,9 @@ function App1() {
           <span>-90</span>
         </div>
         <div>{slider1}</div>
+        <div id="footer">
+          <div>Height: <span> {randomNumber1} m </span> </div>
+        </div>
       </div>
       <div className="range-slider">
         <label htmlFor="led-slider">LED</label>
@@ -190,89 +208,17 @@ function App1() {
           <span>0</span>
         </div>
         <div>{slider2}</div>
-      </div>
+        <div id="footer">
+          <div>Temp CPU: <span> {randomNumber2} t </span> </div>
+        </div>
+      </div> 
     </div>
     {/* =====  FOOTER ===== */}
-    <div id="footer">
-      Height: <span id="height-value">1.85 m </span>
-    </div>
+    
     {/* =====  SCRIPT  ===== */}
   </div>
 </>
   );
 }
-function App2() {
-  const imgRef = useRef(null);
 
-  useEffect(() => {
-    // 1. Подключение к ROS bridge
-    const ros = new ROSLIB.Ros({
-      url: 'ws://10.42.0.1:9090' // Укажите ваш адрес ROS bridge
-    });
-
-    ros.on('connection', () => console.log("Connected to ROS"));
-    ros.on('error', (error) => console.error("Error:", error));
-    ros.on('close', () => console.log("Connection closed"));
-
-    // 2. Подписка на тему с изображением
-    const imageTopic = new ROSLIB.Topic({
-      ros: ros,
-      name: '/pioneer_max_camera/image_raw/compressed', // Замените на вашу тему
-      messageType: 'sensor_msgs/CompressedImage'
-    });
-
-    // 3. Обработка кадров
-    imageTopic.subscribe(message => {
-      if (!imgRef.current) return;
-      
-      // Создаем base64 строку из данных
-      const base64Data = message.data;
-      
-      // Определяем MIME-тип из формата
-      let mimeType;
-      switch (message.format.toLowerCase()) {
-        case 'jpeg': 
-        case 'jpg':
-          mimeType = 'image/jpeg';
-          break;
-        case 'png':
-          mimeType = 'image/png';
-          break;
-        default:
-          console.warn('Unknown format:', message.format);
-          mimeType = 'image/jpeg'; // Фолбэк
-      }
-
-      imgRef.current.src = `data:${mimeType};base64,${base64Data}`;
-    });
-
-    // Отписка при размонтировании компонента
-    return () => {
-      imageTopic.unsubscribe();
-      ros.close();
-    };
-  }, []);
-
-  return (
-    <div className="App">
-      <h1>ROS Image Stream</h1>
-      <img 
-        ref={imgRef} 
-        style={{ maxWidth: '60%', display: 'block', margin: '0 auto' }}
-      />
-    </div>
-  );
-}
-function IntegratedApp() {
-  return (
-    <>
-      <div key="app1">
-      <div key="app2">
-        <App2 />
-      </div>
-        <App1 />
-      </div>
-    </>
-  );
-}
 export default App1;
