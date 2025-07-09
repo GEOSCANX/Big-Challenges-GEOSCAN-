@@ -19,6 +19,24 @@ app.add_middleware(
 class UserData(BaseModel):
     user_text: str
 
+@app.post("/api/data2")
+async def generate_data(data: UserData):
+    random_numT = random.randint(1, 50)
+    print(f"{datetime.now()}: Получен текст '{data.user_text}', отправлено число {random_numT}")
+    return {
+        "random_number2": random_numT,
+        "received_text2": data.user_text,
+        "timestamp": datetime.now().isoformat()
+    }
+@app.post("/api/data1")
+async def generate_data(data: UserData):
+    random_numH = random.randint(1, 50)
+    print(f"{datetime.now()}: Получен текст '{data.user_text}', отправлено число {random_numH}")
+    return {
+        "random_number1": random_numH,
+        "received_text1": data.user_text,
+        "timestamp": datetime.now().isoformat()
+    }
 @app.post("/api/data")
 async def generate_data(data: UserData):
     random_num = random.randint(1, 100)
