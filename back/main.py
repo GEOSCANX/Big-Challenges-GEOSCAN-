@@ -45,13 +45,14 @@ async def led(value: int):
 @app.get("/")
 async def read_items():
     return {"info": metr}
-'''
+
 import time
 
 import roslibpy
 
 import pygame
-
+ 
+rc= [-1.,-1.,-1.,-1,0,0xFF,32767,0xFF]
 # Инициализация Pygame
 pygame.init()
 pygame.joystick.init()
@@ -63,20 +64,60 @@ for joystick in joysticks:
     print(f"Found joystick: {joystick.get_name()}")
 
 
-client = roslibpy.Ros(host='10.42.0.1', port=9090)
+client = roslibpy.Ros(host='10.42.0.1', port=9090)#'192.168.1.1', port=9090)
 client.run()
 
-talker = roslibpy.Topic(client, '/chatter', 'std_msgs/float')
+talker = roslibpy.Topic(client, '/geoscan/flight/rc', 'std_msgs/Float32MultiArray')
 
 while client.is_connected:
+    talker.publish(roslibpy.Message({'data' : rc}))
     for event in pygame.event.get():
         if event.type == pygame.JOYAXISMOTION:
             a=list({event.axis})
-            print(a[0])
-            talker.publish(roslibpy.Message({str(a[0]): {event.value}}))
-            print('Sending message...')
-    time.sleep(1)
+            if(a[0]<5):
+                normalized_x = (event.value + 0.8346812341685232) / (0.8346812341685232 * 2)
+                new_x = normalized_x * 2 - 1
+                rc[a[0]]=new_x
+    talker.publish(roslibpy.Message({'data' : rc}))
+    print('Sending message...')
+    #time.sleep(1)
 
 talker.unadvertise()
 
 client.terminate()
+'''
+import time
+import roslibpy
+import pygame
+
+rc= [-1.,-1.,-1.,-1,0,0xFF,32767,0xFF]
+# Инициализация Pygame
+pygame.init()
+pygame.joystick.init()
+
+# Получение списка подключенных джойстиков
+joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
+for joystick in joysticks:
+    joystick.init()
+    print(f"Found joystick: {joystick.get_name()}")
+
+
+clock = pygame.time.Clock()  # создаём «таймер» от Pygame
+
+client = roslibpy.Ros(host='10.42.0.1', port=9090)
+client.run()
+talker = roslibpy.Topic(client, '/geoscan/flight/rc', 'std_msgs/Float32MultiArray')
+
+while client.is_connected:
+    # Обработка событий
+    for event in pygame.event.get():
+        if event.type == pygame.JOYAXISMOTION and event.axis < 5:
+            norm = (event.value + 0.8346812341685232) / (0.8346812341685232 * 2)
+            rc[event.axis] = norm * 2 - 1
+
+    # Публикация
+    talker.publish(roslibpy.Message({'data': rc}))
+    print('Sending message...')
+
+    # Ограничиваем цикл до 100 итераций в секунду
+    clock.tick(100)
