@@ -11,63 +11,38 @@ function App1() {
   const [error, setError] = useState(null);
   const [timeLeft, setTimeLeft] = useState(60);
 
+  const [ros, setRos] = useState(null);
+  const [angle, setAngle] = useState(180);
 
-  const [randomNumber1, setRandomNumber1] = useState(null);
-  const [text1, setText1] = useState('');
-  const [loading1, setLoading1] = useState(false);
-  const [error1, setError1] = useState(null);
-  const [randomNumber2, setRandomNumber2] = useState(null);
-  const [text2, setText2] = useState('');
-  const [loading2, setLoading2] = useState(false);
-  const [error2, setError2] = useState(null);
+  const [brightness, setBrightness] = useState(0);
+  const [isConnected, setIsConnected] = useState(false);
 
-  const fetchData = async () => {
-    try {
-      setLoading2(true);
-      const response2 = await axios.post('http://localhost:8000/api/data2', {user_text: text2});
-      setRandomNumber2(response2.data.random_number2);
-      setError2(null);
-      setLoading2(true);
-      const response1 = await axios.post('http://localhost:8000/api/data1', {user_text: text1});
-      setRandomNumber1(response1.data.random_number1);
-      setError1(null);
-      setLoading(true);
-      const response = await axios.post('http://localhost:8000/api/data', {user_text: text});
-      setRandomNumber(response.data.random_number);
-      setError(null);
-    } catch (err) {
-      setError(`Ошибка: ${err.message}`);
-      console.error('Ошибка при запросе:', err);
-    } finally {
-      setLoading(false);
-      setLoading1(false);
-      setLoading2(false);
-    }
-  };
   useEffect(() => {
-    const ros = new ROSLIB.Ros({
-      url: 'ws://10.42.0.1:9090' // Укажите ваш адрес ROS bridge
-    });
+    const ros = new ROSLIB.Ros({ url: 'ws://10.42.0.1:9090' });
+        
+        ros.on('connection', () => {
+          console.log("Connected to ROS Bridge");
+          setIsConnected(true);
+        });
+        
+        ros.on('error', (error) => {
+          console.error("ROS Error:", error);
+          setIsConnected(false);
+        });
+        
+        ros.on('close', () => {
+          console.log("ROS connection closed");
+          setIsConnected(false);
+        });
 
-    ros.on('connection', () => console.log("Connected to ROS"));
-    ros.on('error', (error) => console.error("Error:", error));
-    ros.on('close', () => console.log("Connection closed"));
-
-    // 2. Подписка на тему с изображением
     const imageTopic = new ROSLIB.Topic({
       ros: ros,
-      name: '/pioneer_max_camera/image_raw/compressed', // Замените на вашу тему
-      messageType: 'sensor_msgs/CompressedImage'
+      name: '/pioneer_max_camera/image_raw/compressed', 
+      messageType: 'sensor_msgs/CompressedImagex'
     });
-
-    // 3. Обработка кадров
     imageTopic.subscribe(message => {
       if (!imgRef.current) return;
-      
-      // Создаем base64 строку из данных
       const base64Data = message.data;
-      
-      // Определяем MIME-тип из формата
       let mimeType;
       switch (message.format.toLowerCase()) {
         case 'jpeg': 
@@ -81,49 +56,63 @@ function App1() {
           console.warn('Unknown format:', message.format);
           mimeType = 'image/jpeg'; // Фолбэк
       }
-
       imgRef.current.src = `data:${mimeType};base64,${base64Data}`;
     });
-
-    fetchData();
-    const intervalId = setInterval(fetchData, 60000);
-    const timerId = setInterval(() => {
-      setTimeLeft(prev => prev <= 1 ? 60 : prev - 1);
-    }, 1000);
-
+    setRos(ros);
+    
     return () => {
-      imageTopic.unsubscribe();
       ros.close();
-      clearInterval(intervalId);
-      clearInterval(timerId);
     };
-  }, [text],[text1],[text2]);
-
-  const [slider1, setSlider1] = useState(50);
-  const [slider2, setSlider2] = useState(50);
-  const [apiStatus, setApiStatus] = useState('');
-
-  const handleSliderChange = async (sliderName, value) => {
-    // Обновляем состояние сразу для плавного UI
-    if (sliderName === 'slider1') {
-      setSlider1(value);
-    } else {
-      setSlider2(value);
-    }
-
-    try {
-      setApiStatus('Отправка...');
-      const response = await axios.post('http://localhost:8000/api/sliders', {
-        slider_name: sliderName, 
-        value: parseInt(value)
+  },[]);
+  const sendServoAngle = (angleValue) => {
+      if (!ros) return;
+        const topic = new ROSLIB.Topic({
+        ros: ros,
+        name: '/servo',
+        messageType: 'std_msgs/String'
       });
-      setApiStatus(`Успешно: ${response.data.message}`);
-    } catch (error) {
-      setApiStatus(`Ошибка: ${error.message}`);
-      console.error('Ошибка:', error.response?.data || error.message);
-    }
+      topic.publish(new ROSLIB.Message({ data: String(angleValue) }));
+    };
+  const handleAngleChange = (newAngle) => {
+    setAngle(newAngle);
+    sendServoAngle(newAngle);
   };
 
+  const sendBrightness = (value) => {
+      if (!ros || !isConnected) {
+        console.warn("ROS not connected");
+        return;
+      }
+  
+      try {
+        const service = new ROSLIB.Service({
+          ros: ros,
+          name: '/geoscan/led/module/set',
+          serviceType: 'geoscan_msgs/Led'
+        });
+  
+        const request = new ROSLIB.ServiceRequest({
+          leds: Array(64).fill({  
+            r: value,
+            g: value,
+            b: value,
+            a: 255
+          })
+        });
+  
+        service.callService(request, (response) => {
+          console.log("Service response:", response);
+        });
+      } catch (error) {
+        console.error("Service call failed:", error);
+      }
+    };
+  
+    const handleBrightnessChange = (e) => {
+      const value = Number(e.target.value);
+      setBrightness(value);
+      sendBrightness(value);
+    };
   return (
     <>
   <meta charSet="UTF-8" />
@@ -149,7 +138,7 @@ function App1() {
       onclick="handleCameraSwitch()"
       title="Click to switch camera (stub)"
     >
-      <span id="battery-text">{randomNumber} %</span>
+      <span id="battery-text"> %</span>
       <div className="battery-box">
         <div className="battery-level" />
       </div>
@@ -171,23 +160,23 @@ function App1() {
       <div className="range-slider">
         <label htmlFor="cam-slider">CAM</label>
         <div className="slider-labels">
-          <span>+90</span>
+          <span>180</span>
         </div>
         <input
           orient="vertical"
           type="range"
-          min="-90"
-          max="90"
-          value={slider1}
-          onChange={(e) => handleSliderChange('slider1', e.target.value)}
+          min="0"
+          max="180"
+          value={angle}
+          onChange={(e) => handleAngleChange(parseInt(e.target.value))} 
           style={{ width: '100%' }}
         />
         <div className="slider-labels">
-          <span>-90</span>
+          <span>0</span>
         </div>
-        <div>{slider1}</div>
+        <div>{angle}</div>
         <div id="footer">
-          <div>Height: <span> {randomNumber1} m </span> </div>
+          <div>Height: <span>  m </span> </div>
         </div>
       </div>
       <div className="range-slider">
@@ -200,16 +189,16 @@ function App1() {
           type="range"
           min="0"
           max="255"
-          value={slider2}
-          onChange={(e) => handleSliderChange('slider2', e.target.value)}
+          value={brightness}
+          onChange={handleBrightnessChange}
           style={{ width: '100%' }}
         />
         <div className="slider-labels">
           <span>0</span>
         </div>
-        <div>{slider2}</div>
+        <div>{brightness}</div>
         <div id="footer">
-          <div>Temp CPU: <span> {randomNumber2} t </span> </div>
+          <div>Temp CPU: <span>  t </span> </div>
         </div>
       </div> 
     </div>
